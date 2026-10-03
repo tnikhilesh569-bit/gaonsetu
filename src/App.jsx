@@ -1,28 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { ShoppingBag, Store, Truck, ShieldCheck, Volume2, Plus, Upload, CheckCircle2, MapPin, Search } from 'lucide-react';
 
-// Initialize Supabase Client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = (supabaseUrl && supabaseAnonKey) ? createClient(supabaseUrl, supabaseAnonKey) : null;
+// Supabase Initialization
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = (supabaseUrl && supabaseKey) ? createClient(supabaseUrl, supabaseKey) : null;
 
 // Cloudinary Configuration
-const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'g10t7iyd';
-const uploadPreset = import.meta.env.VITE_CLOUDINARY_PRESET || 'gaonsetu_uploads';
+const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const uploadPreset = import.meta.env.VITE_CLOUDINARY_PRESET;
 
 export default function App() {
-  const [activePortal, setActivePortal] = useState('customer'); // customer, vendor, agent, admin
+  const [activeRole, setActiveRole] = useState('customer'); // customer, vendor, agent, admin
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [newProduct, setNewProduct] = useState({ title: '', price: '', description: '', image_url: '' });
+  const [uploading, setUploading] = useState(false);
 
-  // Vendor Form State
-  const [newTitle, setNewTitle] = useState('');
-  const [newPrice, setNewPrice] = useState('');
-  const [newItemType, setNewItemType] = useState('product');
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [imageUrl, setImageUrl] = useState('');
-
+  // Fetch Products on Mount
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -35,13 +31,16 @@ export default function App() {
     setLoading(false);
   };
 
-  // Text-to-Speech Hindi Voice Reader
+  // Hindi Voice Description (Speech Synthesis)
   const speakHindi = (text) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'hi-IN';
+      utterance.rate = 0.9;
       window.speechSynthesis.speak(utterance);
+    } else {
+      alert('Your browser does not support text-to-speech.');
     }
   };
 
@@ -49,8 +48,8 @@ export default function App() {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    setUploading(true);
 
-    setUploadingImage(true);
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', uploadPreset);
@@ -58,281 +57,320 @@ export default function App() {
     try {
       const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
         method: 'POST',
-        body: formData
+        body: formData,
       });
       const data = await res.json();
       if (data.secure_url) {
-        setImageUrl(data.secure_url);
+        setNewProduct({ ...newProduct, image_url: data.secure_url });
       }
     } catch (err) {
-      console.error("Upload error:", err);
+      alert('Image upload failed. Please try again.');
     } finally {
-      setUploadingImage(false);
+      setUploading(false);
     }
   };
 
+  // Create Product in Supabase
   const handleAddProduct = async (e) => {
     e.preventDefault();
-    if (!supabase || !newTitle || !newPrice) return;
-
+    if (!newProduct.title || !newProduct.price) return alert('Fill required fields');
     setLoading(true);
-    const { error } = await supabase.from('products_services').insert([
-      {
-        title: newTitle,
-        price: parseFloat(newPrice),
-        item_type: newItemType,
-        image_url: imageUrl || 'https://via.placeholder.com/300?text=GaonSetu'
-      }
-    ]);
 
-    if (!error) {
-      setNewTitle('');
-      setNewPrice('');
-      setImageUrl('');
+    if (supabase) {
+      await supabase.from('products_services').insert([
+        {
+          title: newProduct.title,
+          price: parseFloat(newProduct.price),
+          description: newProduct.description,
+          image_url: newProduct.image_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80',
+          item_type: 'product'
+        }
+      ]);
+      setNewProduct({ title: '', price: '', description: '', image_url: '' });
       fetchProducts();
-      alert("उत्पाद/सेवा सफलतापूर्वक जोड़ी गई!");
-    } else {
-      alert("Error adding product: " + error.message);
     }
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col justify-between max-w-md mx-auto shadow-2xl border-x border-slate-200">
-      
-      {/* Branded Header with Logo */}
-      <header className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white p-3 sticky top-0 z-50 shadow-md border-b border-emerald-600">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="bg-white p-1 rounded-lg shadow-sm border border-emerald-300 flex items-center justify-center">
-              <img 
-                src="/logo.png" 
-                alt="GaonSetu Logo" 
-                className="h-9 w-auto object-contain"
-                onError={(e) => {
-                  // Fallback icon if logo image path is loading
-                  e.target.onerror = null; 
-                  e.target.style.display = 'none';
-                }}
-              />
-            </div>
-            <div>
-              <h1 className="text-lg font-extrabold tracking-tight leading-tight flex items-center gap-1">
-                गाँव<span className="text-amber-400">SETU</span>
-              </h1>
-              <p className="text-[10px] text-emerald-200 font-medium">Gramin Bharat ka Digital Setu</p>
-            </div>
-          </div>
+    <div style={styles.appContainer}>
+      {/* Claymorphic Global Styles & Keyframe Animations */}
+      <style>{`
+        * { box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background-color: #eaf2ed; margin: 0; padding: 0; color: #1e293b; }
+        
+        /* Claymorphic 3D Card */
+        .clay-card {
+          background: #f0f7f2;
+          border-radius: 28px;
+          box-shadow: 9px 9px 18px #d2ded5, -9px -9px 18px #ffffff, inset 2px 2px 5px rgba(255,255,255,0.8), inset -2px -2px 5px rgba(0,0,0,0.04);
+          transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .clay-card:hover {
+          transform: translateY(-4px);
+        }
 
-          <button 
-            onClick={() => speakHindi(`गाँवसेतु में आपका स्वागत है। ग्रामीण भारत का डिजिटल सेतु।`)}
-            className="bg-emerald-900/80 hover:bg-emerald-900 text-amber-300 px-2.5 py-1.5 rounded-full text-xs font-bold border border-amber-400/60 shadow-sm flex items-center gap-1"
-            title="आवाज़ सुनें"
-          >
-            <span>🔊</span>
-            <span className="text-[11px]">सुनें</span>
-          </button>
+        /* 3D Clay Interactive Button Primary (Emerald) */
+        .clay-btn-primary {
+          background: linear-gradient(145deg, #10b981, #059669);
+          color: #ffffff;
+          border: none;
+          border-radius: 20px;
+          padding: 14px 22px;
+          font-weight: 700;
+          cursor: pointer;
+          box-shadow: 6px 6px 14px #c2d4c7, -6px -6px 14px #ffffff, inset 2px 2px 4px rgba(255,255,255,0.4);
+          transition: all 0.15s ease;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .clay-btn-primary:active {
+          transform: translateY(3px);
+          box-shadow: inset 3px 3px 6px rgba(0,0,0,0.25);
+        }
+
+        /* 3D Clay Role Pill Buttons */
+        .clay-pill {
+          background: #eaf2ed;
+          border: none;
+          border-radius: 16px;
+          padding: 10px 18px;
+          font-weight: 700;
+          color: #475569;
+          cursor: pointer;
+          box-shadow: 4px 4px 10px #cfdcd2, -4px -4px 10px #ffffff;
+          transition: all 0.2s ease;
+        }
+        .clay-pill-active {
+          background: linear-gradient(145deg, #059669, #047857) !important;
+          color: #ffffff !important;
+          box-shadow: inset 3px 3px 6px rgba(0,0,0,0.3) !important;
+        }
+
+        /* Input Fields Claymorphism */
+        .clay-input {
+          width: 100%;
+          background: #eaf2ed;
+          border: none;
+          border-radius: 16px;
+          padding: 14px 18px;
+          font-size: 15px;
+          outline: none;
+          box-shadow: inset 4px 4px 8px #cfdcd2, inset -4px -4px 8px #ffffff;
+          margin-bottom: 12px;
+        }
+
+        /* Pulse Animation */
+        @keyframes pulseGlow {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.03); }
+          100% { transform: scale(1); }
+        }
+        .pulse-logo { animation: pulseGlow 3s infinite ease-in-out; }
+      `}</style>
+
+      {/* Header Bar */}
+      <header style={styles.header}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <img 
+            src="/logo.png" 
+            alt="GaonSetu" 
+            className="pulse-logo"
+            onError={(e) => { e.target.style.display = 'none'; }} 
+            style={{ width: '42px', height: '42px', borderRadius: '12px', objectFit: 'cover' }}
+          />
+          <div>
+            <h1 style={{ margin: 0, fontSize: '22px', fontWeight: 800, color: '#047857' }}>गांवसेतु (GaonSetu)</h1>
+            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>ग्रामीण डिजिटल क्रांति • Digital Rural Hub</span>
+          </div>
         </div>
 
-        {/* Portal Indicator Sub-bar */}
-        <div className="mt-2 pt-1.5 border-t border-emerald-600/50 flex justify-between items-center text-[11px]">
-          <span className="bg-emerald-900/60 px-2 py-0.5 rounded text-amber-300 font-semibold uppercase tracking-wider">
-            {activePortal === 'customer' && '🛒 ग्राहक पोर्टल'}
-            {activePortal === 'vendor' && '🏪 विक्रेता पोर्टल'}
-            {activePortal === 'agent' && '🚴 एजेंट पोर्टल'}
-            {activePortal === 'admin' && '⚙️ एडमिन पैनल'}
-          </span>
-          <span className="text-emerald-100 text-[10px]">2G/3G ओप्टिमाइज्ड</span>
+        {/* Location Badge */}
+        <div className="clay-card" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px', borderRadius: '16px' }}>
+          <MapPin size={16} color="#059669" />
+          <span style={{ fontSize: '13px', fontWeight: 700, color: '#0f766e' }}>बिहार (Bihar)</span>
         </div>
       </header>
 
-      {/* Main Body Content by Role */}
-      <main className="flex-1 p-4 overflow-y-auto mb-16">
-        {/* CUSTOMER PORTAL */}
-        {activePortal === 'customer' && (
-          <div className="space-y-4">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="सामान या सेवा खोजें..."
-                className="w-full p-2.5 rounded-lg border border-slate-300 text-sm focus:outline-emerald-600 bg-white shadow-sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            <h2 className="font-bold text-slate-800 text-base flex justify-between items-center">
-              उपलब्ध सामान एवं सेवाएं
-              <span className="text-xs text-slate-500 font-normal">({products.length} उपलब्ध)</span>
-            </h2>
-
-            {loading ? (
-              <p className="text-center text-slate-500 my-8">लोड हो रहा है...</p>
-            ) : products.length === 0 ? (
-              <div className="bg-white p-6 text-center rounded-xl border border-dashed border-slate-300">
-                <p className="text-slate-500 font-medium">कोई उत्पाद नहीं मिला।</p>
-                <p className="text-xs text-slate-400 mt-1">विक्रेता पोर्टल से नया उत्पाद जोड़ें।</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                {products
-                  .filter(p => p.title.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map(item => (
-                    <div key={item.id} className="bg-white rounded-xl overflow-hidden shadow-sm border border-slate-200 flex flex-col justify-between">
-                      <img src={item.image_url || 'https://via.placeholder.com/150'} alt={item.title} className="h-28 w-full object-cover" />
-                      <div className="p-2.5 flex-1 flex flex-col justify-between">
-                        <div>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.item_type === 'product' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                            {item.item_type === 'product' ? 'सामान' : 'सेवा'}
-                          </span>
-                          <h3 className="font-semibold text-slate-800 text-sm mt-1 line-clamp-1">{item.title}</h3>
-                          <p className="text-emerald-700 font-bold text-sm">₹{item.price}</p>
-                        </div>
-                        <div className="mt-2 flex gap-1">
-                          <button 
-                            onClick={() => speakHindi(`${item.title}, मूल्य ${item.price} रुपये`)}
-                            className="bg-slate-100 text-slate-700 p-1.5 rounded-md text-xs hover:bg-slate-200"
-                          >
-                            🔊
-                          </button>
-                          <button 
-                            onClick={() => alert(`ऑर्डर दर्ज हुआ: ${item.title}`)}
-                            className="flex-1 bg-emerald-600 text-white py-1 rounded-md text-xs font-semibold hover:bg-emerald-700"
-                          >
-                            खरीदें (COD/UPI)
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* VENDOR PORTAL */}
-        {activePortal === 'vendor' && (
-          <div className="space-y-4">
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-              <h2 className="font-bold text-slate-800 mb-3">नया सामान/सेवा जोड़ें (Vendor Add Item)</h2>
-              <form onSubmit={handleAddProduct} className="space-y-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">नाम (Title)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="उदा. ताज़ा दूध, सिलाई कार्य, ट्रैक्टर"
-                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                    value={newTitle}
-                    onChange={(e) => setNewTitle(e.target.value)}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-1">मूल्य (Price ₹)</label>
-                    <input
-                      type="number"
-                      required
-                      placeholder="₹"
-                      className="w-full p-2 border border-slate-300 rounded-lg text-sm"
-                      value={newPrice}
-                      onChange={(e) => setNewPrice(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-1">प्रकार (Type)</label>
-                    <select
-                      className="w-full p-2 border border-slate-300 rounded-lg text-sm bg-white"
-                      value={newItemType}
-                      onChange={(e) => setNewItemType(e.target.value)}
-                    >
-                      <option value="product">सामान (Product)</option>
-                      <option value="service">सेवा (Service)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 block mb-1">फोटो अपलोड (Cloudinary direct upload)</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700"
-                  />
-                  {uploadingImage && <p className="text-xs text-amber-600 mt-1">फोटो कंप्रेस हो रही है...</p>}
-                  {imageUrl && <p className="text-xs text-emerald-600 mt-1">✓ फोटो तैयार है!</p>}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading || uploadingImage}
-                  className="w-full bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-bold hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  {loading ? 'जोड़ा जा रहा है...' : 'जोड़ें (Publish Item)'}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* DELIVERY AGENT PORTAL */}
-        {activePortal === 'agent' && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-            <h2 className="font-bold text-slate-800">डिलीवरी एजेंट पोर्टल (Delivery Partner)</h2>
-            <p className="text-xs text-slate-500">आपके ग्राम पंचायत क्षेत्र के डिलीवरी ऑर्डर यहाँ दिखेंगे।</p>
-            <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs font-bold text-slate-700">ऑर्डर #GS-8921</p>
-                  <p className="text-xs text-slate-500">स्थान: गाँव रामपुर</p>
-                </div>
-                <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded">पेंडिंग डिलीवरी</span>
-              </div>
-              <div className="mt-3 flex gap-2">
-                <input type="text" placeholder="OTP दर्ज करें" className="w-1/2 p-1.5 text-xs border border-slate-300 rounded" />
-                <button className="w-1/2 bg-emerald-600 text-white text-xs font-bold rounded py-1.5">डिलीवरी पूर्ण करें</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ADMIN PORTAL */}
-        {activePortal === 'admin' && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-            <h2 className="font-bold text-slate-800">एडमिन डैशबोर्ड (Admin Portal)</h2>
-            <div className="grid grid-cols-2 gap-2 text-center">
-              <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-lg">
-                <p className="text-xs text-slate-600">कुल प्रोडक्ट्स</p>
-                <p className="text-lg font-bold text-emerald-800">{products.length}</p>
-              </div>
-              <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-lg">
-                <p className="text-xs text-slate-600">पेंडिंग UTR वेरिफिकेशन</p>
-                <p className="text-lg font-bold text-amber-800">0</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Role Switcher Bottom Navigation */}
-      <nav className="fixed bottom-0 max-w-md w-full bg-white border-t border-slate-200 grid grid-cols-4 text-center py-2 z-50">
+      {/* Navigation Roles (3D Clay Pills) */}
+      <nav style={styles.roleNav}>
         {[
-          { id: 'customer', label: 'ग्राहक', icon: '🛒' },
-          { id: 'vendor', label: 'विक्रेता', icon: '🏪' },
-          { id: 'agent', label: 'एजेंट', icon: '🚴' },
-          { id: 'admin', label: 'एडमिन', icon: '⚙️' }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActivePortal(tab.id)}
-            className={`flex flex-col items-center text-xs font-semibold ${activePortal === tab.id ? 'text-emerald-700' : 'text-slate-400'}`}
-          >
-            <span className="text-base">{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
+          { id: 'customer', label: 'ग्राहक (Customer)', icon: ShoppingBag },
+          { id: 'vendor', label: 'दुकानदार (Vendor)', icon: Store },
+          { id: 'agent', label: 'डिलीवरी (Agent)', icon: Truck },
+          { id: 'admin', label: 'एडमिन (Admin)', icon: ShieldCheck },
+        ].map((role) => {
+          const Icon = role.icon;
+          return (
+            <button
+              key={role.id}
+              onClick={() => setActiveRole(role.id)}
+              className={`clay-pill ${activeRole === role.id ? 'clay-pill-active' : ''}`}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Icon size={16} />
+              {role.label}
+            </button>
+          );
+        })}
       </nav>
+
+      {/* CUSTOMER PORTAL */}
+      {activeRole === 'customer' && (
+        <section>
+          {/* Voice Search Prompt */}
+          <div className="clay-card" style={{ padding: '20px', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <h3 style={{ margin: '0 0 4px 0', color: '#065f46' }}>बोलकर सामान खोजें (Voice Search)</h3>
+              <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>आवाज़ से सामान सुनने के लिए माइक पर टैप करें</p>
+            </div>
+            <button className="clay-btn-primary" onClick={() => speakHindi('गांवसेतु में आपका स्वागत है। आप यहाँ अपने गांव के उत्पाद खरीद सकते हैं।')}>
+              <Volume2 size={20} /> सुनें
+            </button>
+          </div>
+
+          {/* Product Grid */}
+          <h2 style={{ fontSize: '18px', color: '#0f766e', marginBottom: '16px' }}>ताज़ा सामान और सेवाएं (Products)</h2>
+          {loading ? (
+            <p>Loading products from Supabase...</p>
+          ) : (
+            <div style={styles.productGrid}>
+              {products.length === 0 ? (
+                <div className="clay-card" style={{ padding: '30px', textAlign: 'center', gridColumn: '1 / -1' }}>
+                  <p>कोई उत्पाद नहीं मिला। विक्रेता पोर्टल से नया सामान जोड़ें!</p>
+                </div>
+              ) : (
+                products.map((item) => (
+                  <div key={item.id} className="clay-card" style={{ padding: '16px', overflow: 'hidden' }}>
+                    <img 
+                      src={item.image_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80'} 
+                      alt={item.title} 
+                      style={{ width: '100%', height: '160px', objectFit: 'cover', borderRadius: '18px', marginBottom: '12px' }} 
+                    />
+                    <h4 style={{ margin: '0 0 6px 0', fontSize: '16px' }}>{item.title}</h4>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#64748b' }}>{item.description || 'शुद्ध एवं स्थानीय उत्पाद'}</p>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '18px', fontWeight: 800, color: '#059669' }}>₹{item.price}</span>
+                      <button className="clay-btn-primary" onClick={() => speakHindi(`${item.title}, कीमत ${item.price} रुपये`)}>
+                        <Volume2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* VENDOR PORTAL */}
+      {activeRole === 'vendor' && (
+        <section style={{ maxWidth: '500px', margin: '0 auto' }}>
+          <div className="clay-card" style={{ padding: '24px' }}>
+            <h2 style={{ margin: '0 0 16px 0', color: '#047857', fontSize: '20px' }}>नया उत्पाद जोड़ें (Add Product)</h2>
+            <form onSubmit={handleAddProduct}>
+              <input 
+                type="text" 
+                placeholder="उत्पाद का नाम (e.g. ताज़ा गेहूं)" 
+                className="clay-input" 
+                value={newProduct.title}
+                onChange={(e) => setNewProduct({ ...newProduct, title: e.target.value })}
+                required 
+              />
+              <input 
+                type="number" 
+                placeholder="कीमत (Price in ₹)" 
+                className="clay-input" 
+                value={newProduct.price}
+                onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+                required 
+              />
+              <textarea 
+                placeholder="विवरण (Description)" 
+                className="clay-input" 
+                rows="3"
+                value={newProduct.description}
+                onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+              />
+
+              {/* Image Upload Input */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 700, display: 'block', marginBottom: '6px', color: '#0f766e' }}>
+                  फ़ोटो अपलोड करें (Cloudinary)
+                </label>
+                <input type="file" accept="image/*" onChange={handleImageUpload} style={{ display: 'none' }} id="photo-upload" />
+                <label htmlFor="photo-upload" className="clay-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <Upload size={16} /> {uploading ? 'अपलोड हो रहा है...' : 'गैलरी से चुनें'}
+                </label>
+                {newProduct.image_url && <span style={{ marginLeft: '10px', color: '#059669', fontSize: '13px' }}>✓ अपलोड सफल</span>}
+              </div>
+
+              <button type="submit" className="clay-btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={loading}>
+                <Plus size={18} /> {loading ? 'सेव हो रहा है...' : 'उत्पाद प्रकाशित करें'}
+              </button>
+            </form>
+          </div>
+        </section>
+      )}
+
+      {/* DELIVERY AGENT PORTAL */}
+      {activeRole === 'agent' && (
+        <section style={{ maxWidth: '500px', margin: '0 auto' }}>
+          <div className="clay-card" style={{ padding: '24px', textAlign: 'center' }}>
+            <Truck size={48} color="#059669" style={{ marginBottom: '12px' }} />
+            <h2 style={{ margin: '0 0 8px 0', color: '#065f46' }}>डिलीवरी एजेंट डैशबोर्ड</h2>
+            <p style={{ color: '#64748b', fontSize: '14px' }}>आज का असाइन किया गया कोई नया ऑर्डर नहीं है।</p>
+          </div>
+        </section>
+      )}
+
+      {/* ADMIN PORTAL */}
+      {activeRole === 'admin' && (
+        <section style={{ maxWidth: '500px', margin: '0 auto' }}>
+          <div className="clay-card" style={{ padding: '24px' }}>
+            <ShieldCheck size={48} color="#d97706" style={{ marginBottom: '12px' }} />
+            <h2 style={{ margin: '0 0 8px 0', color: '#92400e' }}>एडमिन कंट्रोल</h2>
+            <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '16px' }}>UTR भुगतान सत्यापन और दुकानदार सेटलमेंट स्थिति देख सकते हैं।</p>
+            <div className="clay-card" style={{ padding: '16px', background: '#eaf2ed' }}>
+              <span style={{ fontSize: '13px', fontWeight: 700 }}>डेटाबेस स्थिति: </span>
+              <span style={{ color: supabase ? '#059669' : '#dc2626', fontWeight: 800 }}>
+                {supabase ? 'Supabase कनेक्टेड' : 'कनेक्शन त्रुटि'}
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
+
+// Inline Mobile Layout Styles
+const styles = {
+  appContainer: {
+    maxWidth: '800px',
+    margin: '0 auto',
+    padding: '16px',
+    minHeight: '100vh',
+  },
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '20px',
+    flexWrap: 'wrap',
+    gap: '12px',
+  },
+  roleNav: {
+    display: 'flex',
+    gap: '10px',
+    overflowX: 'auto',
+    paddingBottom: '12px',
+    marginBottom: '20px',
+  },
+  productGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+    gap: '18px',
+  },
+};
